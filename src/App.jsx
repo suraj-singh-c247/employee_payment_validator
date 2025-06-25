@@ -1,11 +1,18 @@
 import { useState } from 'react'
 import './App.css'
 import * as XLSX from "xlsx";
+import EmployeeResult from './components/EmployeeResult';
+import EmployeeForm from './components/EmployeeForm';
+import Button from './components/Button';
+import { templateEmployeeData, templatePayment } from './utils/TemplateEmployee';
+import { validateColumnError, validateFileError } from './utils/error';
 function App() {
   const [employeeData, setEmployeeData] = useState(null);
   const [paymentData, setPaymentData] = useState(null);
   const [flagged, setFlagged] = useState([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState({ employeeData: '', paymentData: '' });
+  const [colError, setColError] = useState('');
+  const [showFlagged, setShowFlagged] = useState(false)
   const handleFileUpload = (e, setter) => {
     const file = e.target.files[0];
     if (!file) {
@@ -28,13 +35,17 @@ function App() {
     reader.readAsBinaryString(file);
   }
 
-  const handleSubmit = () => {
-    if (!employeeData || !paymentData) {
-      setError("Please upload both files.");
-      return;
-    }
-    // employee hours formated data
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    setColError('')
+    setError({});
+    if (!validateFileError(employeeData, paymentData, setError)) return;
+
     const [header, ...datarows] = employeeData;
+    const [payheader, ...paydatarow] = paymentData;
+
+    if (!validateColumnError(header, payheader, setColError)) return;
+    // employee hours formated data   
     const formatedData = datarows.map((data) => {
       const obj = {};
       header.forEach((key, i) => {
@@ -43,7 +54,7 @@ function App() {
       return obj;
     })
     // employee hours payment data
-    const [payheader, ...paydatarow] = paymentData;
+
     const payformatedData = paydatarow.map((data) => {
       const obj = {};
       payheader.forEach((key, i) => {
@@ -84,67 +95,25 @@ function App() {
       })
       .filter((row) => row); // Remove nulls
 
-
+    setShowFlagged(true)
     setFlagged(flaggedRows);
   }
 
- // Export flagged results
-  const exportFlagged = () => {
-    const ws = XLSX.utils.json_to_sheet(flagged);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Flagged");
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([wbout], { type: "application/octet-stream" }), "sheet.xlsx");
-  };
+
   return (
     <>
-      <form className='mb-3'>
-        <h2>Employee Payment Validator</h2>
-        <div className="mb-3">
-          <label className="form-label">Upload Employee Data: </label>
-          <input type="file" accept=".xlsx, .xls, .ods" className="form-control" onChange={(e) => handleFileUpload(e, setEmployeeData)} />
-        </div>
-        <div className="mb-3">
-          <label className="form-label">Upload Payment Data: </label>
-          <input type="file" accept=".xlsx, .xls, .ods" className="form-control" onChange={(e) => handleFileUpload(e, setPaymentData)} />
-        </div>
-        <button type="button" className="btn btn-primary" onClick={handleSubmit}>Submit</button>
-        {error && <p className="text-danger">{error}</p>}
-      </form>
-      {
-        flagged.length > 0 && (
-          <div>
-            <h3 className='mb-3'>Employee Results</h3>
-            <button onClick={exportFlagged} className='btn btn-info mb-3'>Download Results</button>
+      <h2>Employee Payment Validator</h2>
+      <div className="d-flex align-items-center gap-3">
+        <Button type={"button"} onFunc={templateEmployeeData} btnText={"Template Employee File"} className='btn btn-info mb-3' />
+        <Button type={"button"} onFunc={templatePayment} btnText={"Template Payment File"} className='btn btn-info mb-3' />
+      </div>
+      <EmployeeForm setEmployeeData={setEmployeeData} setPaymentData={setPaymentData} error={error} showFlagged={showFlagged} onFunc={handleSubmit} onFileUpload={handleFileUpload} />
 
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">ID</th>
-                  <th scope="col">Employee Name</th>
-                  <th scope="col">Expected</th>
-                  <th scope="col">Paid</th>
-                  <th scope="col">Issue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {flagged.map((row, i) => (
-                  <tr key={i}>
-                    <td>{row["Employee ID"]}</td>
-                    <td>{row["Employee Name"]}</td>
-                    <td>{row.Expected}</td>
-                    <td>{row.Paid}</td>
-                    <td>{row.Issue}</td>
-                  </tr>
-                ))}
+      {colError && !showFlagged && <p className="text-danger fw-bold py-3">{colError}</p>}
+      <EmployeeResult flagged={flagged} />
 
-                {flagged.length === 0 && <tr><td colSpan={5}>No payment found...</td></tr>}
+      {flagged.length === 0 && showFlagged && <p className='text-center fw-bold fs-3'>No Mismatch found...</p>}
 
-              </tbody>
-            </table>
-          </div>
-        )
-      }
     </>
   )
 }
